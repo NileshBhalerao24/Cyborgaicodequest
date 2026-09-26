@@ -65,3 +65,9 @@ A few implementation details weren't specified in the original request; sensible
 - **Sound copy:** the ported interpreter reuses the original web version's exact parser error strings, but the success/fail *banner* copy (not part of the pure-logic block) is new writing in the same friendly, never-harsh tone.
 - **Progress persistence:** in addition to the specified `completed`/`badgesEarned`/`soundOn`, the last-played level is also remembered so the app resumes where you left off.
 - **Icons/splash:** generated programmatically in the space theme (deep purple background, teal robot, gold antenna) since no source artwork existed in this repo; swap `assets/icon.png`, `assets/splash-icon.png`, and the `assets/android-icon-*.png` files for real artwork whenever it's ready.
+
+---
+
+## Also in this repo: Friendship Games (web)
+
+[`friendship-games/`](friendship-games/) is a separate, self-contained HTML/CSS/JS web app. It is an animated cartoon universe (Shadow Bolt vs Wonderbolt) with a dynamic tournament engine, scripted episodes, a character gallery, a video library and mini-games. It doesn't touch the Expo app. See [`friendship-games/README.md`](friendship-games/README.md) to run it.
