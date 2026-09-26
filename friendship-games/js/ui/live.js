@@ -10,7 +10,7 @@ import { eventById } from '../data/events.js';
 import { byId, MAJOR, pairKey } from '../data/characters.js';
 import { TEAMS } from '../data/world.js';
 import * as progress from '../engine/progress.js';
-import { el, newSeed } from '../util.js';
+import { el, newSeed, armed } from '../util.js';
 import { mountPlayer, reflection } from './cartoons.js';
 import { portrait, toast } from './common.js';
 
@@ -99,7 +99,7 @@ export function liveView(root) {
   root.append(
     el('div', { class: 'section-head' }, el('div', {}, el('span', { class: 'chip live' }, '● LIVE'), el('h1', { style: { marginTop: '8px' } }, 'Friendship Games LIVE')),
       el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-        el('button', { class: 'btn small ghost', onclick: () => newTournament() }, '↻ New tournament'))),
+        el('button', { class: 'btn small ghost', onclick: (e) => { if (t && !t.finished && (t.watchedRound || 0) > 0) armed(e.currentTarget, 'Tap again to abandon this one', newTournament); else newTournament(); } }, '↻ New tournament'))),
     el('div', { class: 'live-grid' }, main, side));
 
   const panels = el('div', { style: { marginTop: '18px' } });
@@ -115,7 +115,6 @@ export function liveView(root) {
     refresh();
   }
   function newTournament() {
-    if (t && !t.finished && (t.watchedRound || 0) > 0 && !confirm('Start a new tournament? The current one will be abandoned.')) return;
     progress.saveTournament(null);
     t = currentTournament(true);
     mount();

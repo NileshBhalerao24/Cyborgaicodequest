@@ -6,7 +6,7 @@ import { ALL, byId } from '../data/characters.js';
 import { GAMES } from '../games/index.js';
 import { eventById } from '../data/events.js';
 import { TEAMS } from '../data/world.js';
-import { el } from '../util.js';
+import { el, armed } from '../util.js';
 import { stars, portrait } from './common.js';
 import { level } from './characters.js';
 
@@ -46,6 +46,6 @@ export function progressView(root) {
       el('div', { class: 'panel' }, el('h3', {}, '💬 Your thoughts'),
         p.reflections.length ? el('div', {}, p.reflections.slice().reverse().slice(0, 8).map((r) => el('div', { class: 'rel', style: { gridTemplateColumns: '40px 1fr' } }, el('div', { style: { fontSize: '28px' } }, r.feeling || '💭'), el('div', {}, el('b', {}, r.title), r.favorite ? el('div', { class: 'muted', style: { fontSize: '13px' } }, `Favorite moment: ${r.favorite}`) : null, r.wouldDo ? el('div', { style: { fontSize: '14px' } }, `“${r.wouldDo}”`) : null, r.learned ? el('div', { style: { fontSize: '14px' } }, `“${r.learned}”`) : null)))) : el('p', { class: 'muted' }, 'After an episode ends you can (optionally) share what you thought. It\'s saved here, only on this device.'))),
 
-    el('section', { class: 'section' }, el('button', { class: 'btn ghost small', onclick: () => { if (confirm('Reset all progress on this device?')) { progress.reset(); location.hash = '#/home'; } } }, 'Reset progress')),
+    el('section', { class: 'section' }, el('button', { class: 'btn ghost small', onclick: (e) => armed(e.currentTarget, 'Tap again to erase everything', () => { progress.reset(); location.hash = '#/home'; }) }, 'Reset progress')),
   );
 }

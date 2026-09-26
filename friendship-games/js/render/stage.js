@@ -93,7 +93,7 @@ export class Stage {
   fullscreen() {
     const n = this.root.querySelector('.stage');
     if (document.fullscreenElement) document.exitFullscreen();
-    else n.requestFullscreen?.();
+    else n.requestFullscreen?.()?.catch?.(() => {});
   }
 
   key(e) {
