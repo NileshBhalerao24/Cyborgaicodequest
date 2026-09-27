@@ -28,6 +28,7 @@ export function LevelTrack({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={styles.track}
       contentContainerStyle={styles.row}
       accessibilityRole="tablist"
     >
@@ -78,6 +79,11 @@ export function LevelTrack({
 }
 
 const styles = StyleSheet.create({
+  track: {
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 68,
+  },
   row: {
     gap: 10,
     paddingVertical: 4,
