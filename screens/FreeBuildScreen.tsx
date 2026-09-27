@@ -78,6 +78,11 @@ export function FreeBuildScreen({ sound }: FreeBuildScreenProps) {
       Alert.alert('Saved!', 'Your drawing was saved to your photos.');
     } else if (result === 'failed') {
       Alert.alert("Couldn't share", 'Something went wrong saving your drawing. Try again?');
+    } else if (result === 'unavailable') {
+      Alert.alert(
+        'Not available in Expo Go',
+        "Sharing needs a real app build to work. Try it again after installing a build from 'eas build' instead of Expo Go."
+      );
     }
   };
 
