@@ -1,4 +1,4 @@
-import type { Level } from './levels';
+import type { Position, StartPosition } from './levels';
 
 /* =========================================================
    PARSER  (function extraction -> recursive-descent -> AST nodes)
@@ -277,7 +277,23 @@ interface Budget {
   count: number;
 }
 
-export function evalCond(cond: Condition, state: SimState, level: Level): boolean {
+/**
+ * The minimal shape execute()/simulate() need. `Level` (the graded-lesson
+ * type in game/levels.ts) satisfies this structurally, but so does a small
+ * Predict demo grid or the goal-less Free Build sandbox — neither carries
+ * lesson metadata like title/hint/badge.
+ */
+export interface SimGrid {
+  cols: number;
+  rows: number;
+  start: StartPosition;
+  goal: Position;
+  wallSet: Set<string>;
+  gemSet: Set<string>;
+  gems: Position[];
+}
+
+export function evalCond(cond: Condition, state: SimState, level: SimGrid): boolean {
   let result: boolean;
   if (cond.sensor === 'wallAhead') {
     const nx = state.x + DELTA[state.dir].x;
@@ -292,29 +308,37 @@ export function evalCond(cond: Condition, state: SimState, level: Level): boolea
 export function execute(
   nodes: AstNode[],
   state: SimState,
-  level: Level,
+  level: SimGrid,
   trace: TraceFrame[],
   budget: Budget,
-  gemsCollected: Set<string>
+  gemsCollected: Set<string>,
+  sandbox: boolean = false
 ): void {
   for (const node of nodes) {
     if (typeof node === 'string') {
       if (node === 'move') {
         const nx = state.x + DELTA[state.dir].x;
         const ny = state.y + DELTA[state.dir].y;
-        if (nx < 0 || ny < 0 || nx >= level.cols || ny >= level.rows || level.wallSet.has(nx + ',' + ny)) {
-          trace.push({ x: state.x, y: state.y, dir: state.dir, crashed: true, gem: null });
-          throw new CrashSignal();
+        const blocked = nx < 0 || ny < 0 || nx >= level.cols || ny >= level.rows || level.wallSet.has(nx + ',' + ny);
+        if (blocked) {
+          if (sandbox) {
+            // Free Build: a blocked move is a silent no-op, never a crash.
+            trace.push({ x: state.x, y: state.y, dir: state.dir, crashed: false, gem: null });
+          } else {
+            trace.push({ x: state.x, y: state.y, dir: state.dir, crashed: true, gem: null });
+            throw new CrashSignal();
+          }
+        } else {
+          state.x = nx;
+          state.y = ny;
+          const key = state.x + ',' + state.y;
+          let gem: string | null = null;
+          if (level.gemSet.has(key) && !gemsCollected.has(key)) {
+            gemsCollected.add(key);
+            gem = key;
+          }
+          trace.push({ x: state.x, y: state.y, dir: state.dir, crashed: false, gem });
         }
-        state.x = nx;
-        state.y = ny;
-        const key = state.x + ',' + state.y;
-        let gem: string | null = null;
-        if (level.gemSet.has(key) && !gemsCollected.has(key)) {
-          gemsCollected.add(key);
-          gem = key;
-        }
-        trace.push({ x: state.x, y: state.y, dir: state.dir, crashed: false, gem });
       } else {
         if (node === 'turnRight') state.dir = (state.dir + 1) % 4;
         else state.dir = (state.dir + 3) % 4;
@@ -325,14 +349,14 @@ export function execute(
         throw new Error('This program runs for a very long time — check that something changes each time through your loop.');
       }
     } else if (node.type === 'if') {
-      execute(evalCond(node.cond, state, level) ? node.then : node.else, state, level, trace, budget, gemsCollected);
+      execute(evalCond(node.cond, state, level) ? node.then : node.else, state, level, trace, budget, gemsCollected, sandbox);
     } else if (node.type === 'while') {
       while (evalCond(node.cond, state, level)) {
         budget.count++;
         if (budget.count > MAX_BUDGET) {
           throw new Error('This program runs for a very long time — check that something changes each time through your loop.');
         }
-        execute(node.body, state, level, trace, budget, gemsCollected);
+        execute(node.body, state, level, trace, budget, gemsCollected, sandbox);
       }
     }
   }
@@ -345,14 +369,14 @@ export interface SimulationResult {
   allGems: boolean;
 }
 
-export function simulate(nodes: AstNode[], level: Level): SimulationResult {
+export function simulate(nodes: AstNode[], level: SimGrid, sandbox: boolean = false): SimulationResult {
   const state: SimState = { x: level.start.x, y: level.start.y, dir: level.start.dir };
   const trace: TraceFrame[] = [{ x: state.x, y: state.y, dir: state.dir, crashed: false, gem: null }];
   const budget: Budget = { count: 0 };
   const gemsCollected = new Set<string>();
   let crashed = false;
   try {
-    execute(nodes, state, level, trace, budget, gemsCollected);
+    execute(nodes, state, level, trace, budget, gemsCollected, sandbox);
   } catch (e) {
     if (e instanceof CrashSignal) crashed = true;
     else throw e;

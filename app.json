@@ -38,6 +38,14 @@
           "recordAudioAndroid": false,
           "enableBackgroundPlayback": false
         }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": false,
+          "savePhotosPermission": "Allow Cyborg AI: Code Quest to save your win cards and drawings to your photos.",
+          "granularPermissions": []
+        }
       ]
     ]
   }
