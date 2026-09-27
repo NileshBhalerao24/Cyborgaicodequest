@@ -1,18 +1,37 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Dimensions, View } from 'react-native';
-import Svg, { Circle, Defs, G, Line, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, G, Line, Path, Polygon, Polyline, RadialGradient, Rect, Stop } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../theme/colors';
-import type { Level } from '../game/levels';
+import type { Position } from '../game/levels';
 import type { TraceFrame } from '../game/interpreter';
 
+/** The minimal shape MazeView needs to render a grid — Level satisfies this,
+ * but so do the smaller Predict demo grids and the goal-less Free Build sandbox. */
+export interface MazeGrid {
+  cols: number;
+  rows: number;
+  start: { x: number; y: number; dir: number };
+  goal?: Position;
+  gems?: Position[];
+  wallSet: Set<string>;
+}
+
+const TRAIL_COLORS = [colors.accentTeal, colors.accentPink, colors.accentAmber, colors.accentGreen, colors.accentCoral];
+
 interface MazeViewProps {
-  level: Level;
+  level: MazeGrid;
   trace: TraceFrame[] | null;
   playing: boolean;
   stepMs?: number;
   onFrame?: (frame: TraceFrame, index: number, isLast: boolean) => void;
   onFinished?: () => void;
+  /** Show the goal star. Defaults to true when `level.goal` is set — pass false to hide it even so (e.g. a Predict demo where atGoal() isn't used). */
+  showGoal?: boolean;
+  /** Persistent trails from earlier runs (Free Build) — each entry is one run's path, drawn as its own line. */
+  trailRuns?: Position[][];
+  /** Free Build mode: no crash shake/haptic/red robot, since sandbox execution never marks a frame crashed. */
+  sandbox?: boolean;
 }
 
 const MAX_CELL = 62;
@@ -34,7 +53,17 @@ function starPoints(cx: number, cy: number, outerR: number, innerR: number): str
   return points.join(' ');
 }
 
-export function MazeView({ level, trace, playing, stepMs = 340, onFrame, onFinished }: MazeViewProps) {
+export function MazeView({
+  level,
+  trace,
+  playing,
+  stepMs = 340,
+  onFrame,
+  onFinished,
+  showGoal,
+  trailRuns,
+  sandbox = false,
+}: MazeViewProps) {
   const [frameIndex, setFrameIndex] = useState(0);
   const shakeX = useRef(new Animated.Value(0)).current;
   const wasCrashedRef = useRef(false);
@@ -69,6 +98,7 @@ export function MazeView({ level, trace, playing, stepMs = 340, onFrame, onFinis
     : { x: level.start.x, y: level.start.y, dir: level.start.dir, crashed: false, gem: null };
 
   useEffect(() => {
+    if (sandbox) return;
     if (currentFrame.crashed && !wasCrashedRef.current) {
       wasCrashedRef.current = true;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
@@ -94,6 +124,9 @@ export function MazeView({ level, trace, playing, stepMs = 340, onFrame, onFinis
     }
     return set;
   }, [trace, frameIndex]);
+
+  const gems = level.gems ?? [];
+  const shouldShowGoal = (showGoal ?? true) && !!level.goal;
 
   const screenWidth = Dimensions.get('window').width;
   const availableWidth = Math.min(screenWidth - 48, 420);
@@ -143,8 +176,21 @@ export function MazeView({ level, trace, playing, stepMs = 340, onFrame, onFinis
   }
 
   const rotation = currentFrame.dir * 90;
-  const robotColor = currentFrame.crashed ? colors.accentCoral : colors.accentTeal;
+  const robotColor = !sandbox && currentFrame.crashed ? colors.accentCoral : colors.accentTeal;
   const robotR = cell * 0.32;
+
+  const liveTrailPoints = useMemo(() => {
+    if (!trailRuns || !trace) return [];
+    const pts: Position[] = [];
+    for (let i = 0; i <= Math.min(frameIndex, trace.length - 1); i++) {
+      const f = trace[i];
+      const last = pts[pts.length - 1];
+      if (!last || last.x !== f.x || last.y !== f.y) pts.push({ x: f.x, y: f.y });
+    }
+    return pts;
+  }, [trailRuns, trace, frameIndex]);
+
+  const polylineFor = (points: Position[]) => points.map((p) => `${cx(p.x)},${cy(p.y)}`).join(' ');
 
   return (
     <View style={{ alignItems: 'center' }}>
@@ -163,7 +209,31 @@ export function MazeView({ level, trace, playing, stepMs = 340, onFrame, onFinis
 
           {cells}
 
-          {level.gems
+          {trailRuns?.map((run, runIndex) => (
+            <Polyline
+              key={`trail-run-${runIndex}`}
+              points={polylineFor(run)}
+              fill="none"
+              stroke={TRAIL_COLORS[runIndex % TRAIL_COLORS.length]}
+              strokeWidth={3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.7}
+            />
+          ))}
+          {trailRuns && liveTrailPoints.length > 1 && (
+            <Polyline
+              points={polylineFor(liveTrailPoints)}
+              fill="none"
+              stroke={TRAIL_COLORS[(trailRuns.length || 0) % TRAIL_COLORS.length]}
+              strokeWidth={3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.9}
+            />
+          )}
+
+          {gems
             .filter((g) => !collectedGems.has(`${g.x},${g.y}`))
             .map((g) => (
               <G key={`gem-${g.x}-${g.y}`}>
@@ -177,15 +247,17 @@ export function MazeView({ level, trace, playing, stepMs = 340, onFrame, onFinis
               </G>
             ))}
 
-          <G key="goal">
-            <Circle cx={cx(level.goal.x)} cy={cy(level.goal.y)} r={cell * 0.55} fill="url(#glowAmber)" />
-            <Polygon
-              points={starPoints(cx(level.goal.x), cy(level.goal.y), cell * 0.26, cell * 0.11)}
-              fill={colors.accentAmber}
-              stroke="#FFFFFF"
-              strokeWidth={1}
-            />
-          </G>
+          {shouldShowGoal && level.goal && (
+            <G key="goal">
+              <Circle cx={cx(level.goal.x)} cy={cy(level.goal.y)} r={cell * 0.55} fill="url(#glowAmber)" />
+              <Polygon
+                points={starPoints(cx(level.goal.x), cy(level.goal.y), cell * 0.26, cell * 0.11)}
+                fill={colors.accentAmber}
+                stroke="#FFFFFF"
+                strokeWidth={1}
+              />
+            </G>
+          )}
 
           <G
             key="robot"

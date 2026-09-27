@@ -8,9 +8,20 @@ interface LevelTrackProps {
   completed: LevelCompletion[];
   currentLevel: number;
   onSelect: (index: number) => void;
+  freeBuildUnlocked?: boolean;
+  isFreeBuildSelected?: boolean;
+  onSelectFreeBuild?: () => void;
 }
 
-export function LevelTrack({ levelCount, completed, currentLevel, onSelect }: LevelTrackProps) {
+export function LevelTrack({
+  levelCount,
+  completed,
+  currentLevel,
+  onSelect,
+  freeBuildUnlocked,
+  isFreeBuildSelected,
+  onSelectFreeBuild,
+}: LevelTrackProps) {
   const isUnlocked = (i: number) => i === 0 || completed[i - 1]?.reached;
 
   return (
@@ -22,7 +33,7 @@ export function LevelTrack({ levelCount, completed, currentLevel, onSelect }: Le
     >
       {Array.from({ length: levelCount }, (_, i) => {
         const unlocked = isUnlocked(i);
-        const isCurrent = i === currentLevel;
+        const isCurrent = !isFreeBuildSelected && i === currentLevel;
         const stars = (completed[i]?.reached ? 1 : 0) + (completed[i]?.gems ? 1 : 0);
         return (
           <Pressable
@@ -44,6 +55,24 @@ export function LevelTrack({ levelCount, completed, currentLevel, onSelect }: Le
           </Pressable>
         );
       })}
+
+      {onSelectFreeBuild && (
+        <Pressable
+          disabled={!freeBuildUnlocked}
+          onPress={onSelectFreeBuild}
+          style={[
+            styles.dot,
+            styles.freeBuildDot,
+            isFreeBuildSelected && styles.dotCurrent,
+            !freeBuildUnlocked && styles.dotLocked,
+          ]}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: !!isFreeBuildSelected, disabled: !freeBuildUnlocked }}
+          accessibilityLabel={freeBuildUnlocked ? 'Free Build' : 'Free Build, locked'}
+        >
+          <Text style={styles.dotText}>{freeBuildUnlocked ? '🎨' : '🔒'}</Text>
+        </Pressable>
+      )}
     </ScrollView>
   );
 }
@@ -73,6 +102,10 @@ const styles = StyleSheet.create({
   },
   dotLocked: {
     opacity: 0.5,
+  },
+  freeBuildDot: {
+    backgroundColor: colors.panel,
+    borderColor: colors.accentPink,
   },
   dotText: {
     color: colors.text,

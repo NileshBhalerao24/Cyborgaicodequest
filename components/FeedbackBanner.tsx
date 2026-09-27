@@ -15,6 +15,8 @@ interface FeedbackBannerProps {
   confettiTrigger: number;
   onRetry: () => void;
   onNext: () => void;
+  onShare?: () => void;
+  sharing?: boolean;
 }
 
 function messageFor(outcome: RunOutcome): { icon: string; title: string; body: string } {
@@ -46,7 +48,15 @@ function messageFor(outcome: RunOutcome): { icon: string; title: string; body: s
   }
 }
 
-export function FeedbackBanner({ outcome, isLastLevel, confettiTrigger, onRetry, onNext }: FeedbackBannerProps) {
+export function FeedbackBanner({
+  outcome,
+  isLastLevel,
+  confettiTrigger,
+  onRetry,
+  onNext,
+  onShare,
+  sharing,
+}: FeedbackBannerProps) {
   const { icon, title, body } = messageFor(outcome);
   const isSuccess = outcome.kind === 'success';
   const screenWidth = Dimensions.get('window').width;
@@ -67,11 +77,23 @@ export function FeedbackBanner({ outcome, isLastLevel, confettiTrigger, onRetry,
             style={styles.primaryButton}
             onPress={onNext}
             accessibilityRole="button"
-            accessibilityLabel={isLastLevel ? 'Finish' : 'Go to next lesson'}
+            accessibilityLabel={isLastLevel ? 'Go to Free Build' : 'Go to next lesson'}
           >
-            <Text style={styles.primaryButtonText}>{isLastLevel ? 'Play again 🚀' : 'Next lesson →'}</Text>
+            <Text style={styles.primaryButtonText}>{isLastLevel ? 'Try Free Build 🎨' : 'Next lesson →'}</Text>
           </Pressable>
-        ) : (
+        ) : null}
+        {isSuccess && onShare && (
+          <Pressable
+            style={[styles.secondaryButton, sharing && styles.buttonDisabled]}
+            onPress={onShare}
+            disabled={sharing}
+            accessibilityRole="button"
+            accessibilityLabel="Share your win"
+          >
+            <Text style={styles.secondaryButtonText}>{sharing ? 'Preparing…' : '📤 Share your win'}</Text>
+          </Pressable>
+        )}
+        {!isSuccess && (
           <Pressable
             style={styles.primaryButton}
             onPress={onRetry}
@@ -127,6 +149,7 @@ const styles = StyleSheet.create({
   actions: {
     marginTop: 14,
     width: '100%',
+    gap: 10,
   },
   primaryButton: {
     backgroundColor: colors.accentAmber,
@@ -138,5 +161,21 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontFamily: fonts.headingSemiBold,
     fontSize: 15,
+  },
+  secondaryButton: {
+    backgroundColor: colors.panelLight,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  secondaryButtonText: {
+    color: colors.text,
+    fontFamily: fonts.headingSemiBold,
+    fontSize: 14,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });

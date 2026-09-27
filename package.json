@@ -10,12 +10,15 @@
     "expo-audio": "^57.0.5",
     "expo-font": "^57.0.4",
     "expo-haptics": "^57.0.3",
+    "expo-media-library": "^57.0.5",
+    "expo-sharing": "^57.0.22",
     "expo-splash-screen": "^57.0.9",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "^5.9.1",
-    "react-native-svg": "^15.15.5"
+    "react-native-svg": "^15.15.5",
+    "react-native-view-shot": "^6.0.1"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

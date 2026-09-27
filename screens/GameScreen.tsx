@@ -15,9 +15,11 @@ import * as Haptics from 'expo-haptics';
 import { LEVELS, MAX_STARS } from '../game/levels';
 import { parseProgram, simulate } from '../game/interpreter';
 import type { TraceFrame } from '../game/interpreter';
+import { getPredictDemo } from '../game/predictDemos';
 import { colors, fonts } from '../theme/colors';
 import { useProgress } from '../hooks/useProgress';
 import { useSound } from '../hooks/useSound';
+import { useShare } from '../hooks/useShare';
 
 import { StarfieldBackground } from '../components/StarfieldBackground';
 import { SpeechBubble } from '../components/SpeechBubble';
@@ -26,15 +28,24 @@ import { CodeEditor } from '../components/CodeEditor';
 import { LevelTrack } from '../components/LevelTrack';
 import { BadgeShelf } from '../components/BadgeShelf';
 import { FeedbackBanner, type RunOutcome } from '../components/FeedbackBanner';
+import { PredictAndRun } from '../components/PredictAndRun';
+import { ShareCard } from '../components/ShareCard';
+import { FreeBuildScreen } from './FreeBuildScreen';
 
 const BADGE_TOAST_MS = 2200;
+
+type Mode = 'lesson' | 'freebuild';
+type LessonPhase = 'predict' | 'modify';
 
 export function GameScreen() {
   const { width, height } = useWindowDimensions();
   const progress = useProgress();
   const sound = useSound(progress.soundOn);
+  const { cardRef: winCardRef, shareCard: shareWinCard, busy: sharingWin } = useShare();
 
+  const [mode, setMode] = useState<Mode>('lesson');
   const [currentLevel, setCurrentLevel] = useState(0);
+  const [phase, setPhase] = useState<LessonPhase>('predict');
   const [code, setCode] = useState('');
   const [trace, setTrace] = useState<TraceFrame[] | null>(null);
   const [running, setRunning] = useState(false);
@@ -44,15 +55,23 @@ export function GameScreen() {
 
   const resultRef = useRef<{ success: boolean; crashed: boolean; allGems: boolean } | null>(null);
   const hasHydratedLevel = useRef(false);
+  // Predict→Run is shown once per level per app session (in-memory only — a
+  // fresh app launch shows it again, which matches PRIMM's "predict before
+  // you engage" intent without repeating it on every retry within a session).
+  const seenPredictRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     if (!progress.loading && !hasHydratedLevel.current) {
       hasHydratedLevel.current = true;
-      setCurrentLevel(Math.min(progress.lastLevel, LEVELS.length - 1));
+      const startLevel = Math.min(progress.lastLevel, LEVELS.length - 1);
+      setCurrentLevel(startLevel);
+      setPhase(seenPredictRef.current.has(startLevel) ? 'modify' : 'predict');
     }
   }, [progress.loading, progress.lastLevel]);
 
   const level = LEVELS[currentLevel];
+  const demo = getPredictDemo(currentLevel);
+  const freeBuildUnlocked = progress.completed[LEVELS.length - 1]?.reached ?? false;
 
   const resetRun = () => {
     setTrace(null);
@@ -61,12 +80,28 @@ export function GameScreen() {
     resultRef.current = null;
   };
 
-  const goToLevel = (index: number) => {
-    if (running) return;
+  const enterLevel = (index: number) => {
     setCurrentLevel(index);
     setCode('');
     resetRun();
+    setPhase(seenPredictRef.current.has(index) ? 'modify' : 'predict');
+  };
+
+  const goToLevel = (index: number) => {
+    if (running) return;
+    setMode('lesson');
+    enterLevel(index);
     progress.setLastLevel(index);
+  };
+
+  const handleSelectFreeBuild = () => {
+    if (running || !freeBuildUnlocked) return;
+    setMode('freebuild');
+  };
+
+  const handlePredictDone = () => {
+    seenPredictRef.current.add(currentLevel);
+    setPhase('modify');
   };
 
   const handleRun = () => {
@@ -132,13 +167,26 @@ export function GameScreen() {
     resetRun();
   };
 
+  const isLastLevel = currentLevel === LEVELS.length - 1;
+
   const handleNext = () => {
-    const isLast = currentLevel === LEVELS.length - 1;
-    const next = isLast ? 0 : currentLevel + 1;
-    setCurrentLevel(next);
-    setCode('');
-    resetRun();
+    if (isLastLevel) {
+      setMode('freebuild');
+      return;
+    }
+    const next = currentLevel + 1;
+    enterLevel(next);
     progress.setLastLevel(next);
+  };
+
+  const handleShareWin = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    const result = await shareWinCard();
+    if (result === 'saved') {
+      Alert.alert('Saved!', 'Your win card was saved to your photos.');
+    } else if (result === 'failed') {
+      Alert.alert("Couldn't share", 'Something went wrong sharing your win. Try again?');
+    }
   };
 
   const handleResetProgress = () => {
@@ -152,9 +200,9 @@ export function GameScreen() {
           style: 'destructive',
           onPress: () => {
             progress.resetProgress();
-            setCurrentLevel(0);
-            setCode('');
-            resetRun();
+            seenPredictRef.current = new Set();
+            setMode('lesson');
+            enterLevel(0);
           },
         },
       ]
@@ -195,59 +243,82 @@ export function GameScreen() {
           completed={progress.completed}
           currentLevel={currentLevel}
           onSelect={goToLevel}
+          freeBuildUnlocked={freeBuildUnlocked}
+          isFreeBuildSelected={mode === 'freebuild'}
+          onSelectFreeBuild={handleSelectFreeBuild}
         />
 
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <SpeechBubble level={level} />
+        {mode === 'freebuild' ? (
+          <FreeBuildScreen sound={sound} />
+        ) : (
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {phase === 'predict' && demo ? (
+              <PredictAndRun demo={demo} sound={sound} onDone={handlePredictDone} />
+            ) : (
+              <>
+                <SpeechBubble level={level} />
 
-          <MazeView
-            level={level}
-            trace={trace}
-            playing={running}
-            onFrame={handleFrame}
-            onFinished={handleFinished}
+                <MazeView
+                  level={level}
+                  trace={trace}
+                  playing={running}
+                  onFrame={handleFrame}
+                  onFinished={handleFinished}
+                />
+
+                <View style={styles.editorSection}>
+                  <CodeEditor value={code} onChangeText={setCode} chips={level.chips} editable={!running} />
+                </View>
+
+                <Pressable
+                  style={[styles.runButton, running && styles.runButtonDisabled]}
+                  onPress={handleRun}
+                  disabled={running}
+                  accessibilityRole="button"
+                  accessibilityLabel="Run program"
+                >
+                  <Text style={styles.runButtonText}>{running ? 'Running…' : '▶ Run program'}</Text>
+                </Pressable>
+
+                {outcome && (
+                  <View style={styles.feedbackWrap}>
+                    <FeedbackBanner
+                      outcome={outcome}
+                      isLastLevel={isLastLevel}
+                      confettiTrigger={confettiTrigger}
+                      onRetry={handleRetry}
+                      onNext={handleNext}
+                      onShare={handleShareWin}
+                      sharing={sharingWin}
+                    />
+                  </View>
+                )}
+              </>
+            )}
+
+            <Pressable
+              onLongPress={handleResetProgress}
+              delayLongPress={800}
+              style={styles.badgeSection}
+              accessibilityRole="button"
+              accessibilityLabel="Badge shelf. Long press to reset all progress."
+            >
+              <BadgeShelf levels={LEVELS} earned={progress.badgesEarned} toastBadge={toastBadge} />
+            </Pressable>
+          </ScrollView>
+        )}
+
+        {/* Off-screen — captured by useShare when sharing a lesson win, never shown on screen. */}
+        <View style={styles.offscreen} pointerEvents="none">
+          <ShareCard
+            ref={winCardRef}
+            data={{ kind: 'lesson-win', lessonTitle: level.title, badgeIcon: level.badge.icon, badgeName: level.badge.name }}
           />
-
-          <View style={styles.editorSection}>
-            <CodeEditor value={code} onChangeText={setCode} chips={level.chips} editable={!running} />
-          </View>
-
-          <Pressable
-            style={[styles.runButton, running && styles.runButtonDisabled]}
-            onPress={handleRun}
-            disabled={running}
-            accessibilityRole="button"
-            accessibilityLabel="Run program"
-          >
-            <Text style={styles.runButtonText}>{running ? 'Running…' : '▶ Run program'}</Text>
-          </Pressable>
-
-          {outcome && (
-            <View style={styles.feedbackWrap}>
-              <FeedbackBanner
-                outcome={outcome}
-                isLastLevel={currentLevel === LEVELS.length - 1}
-                confettiTrigger={confettiTrigger}
-                onRetry={handleRetry}
-                onNext={handleNext}
-              />
-            </View>
-          )}
-
-          <Pressable
-            onLongPress={handleResetProgress}
-            delayLongPress={800}
-            style={styles.badgeSection}
-            accessibilityRole="button"
-            accessibilityLabel="Badge shelf. Long press to reset all progress."
-          >
-            <BadgeShelf levels={LEVELS} earned={progress.badgesEarned} toastBadge={toastBadge} />
-          </Pressable>
-        </ScrollView>
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -331,5 +402,10 @@ const styles = StyleSheet.create({
   badgeSection: {
     marginTop: 10,
     paddingTop: 24,
+  },
+  offscreen: {
+    position: 'absolute',
+    top: -9999,
+    left: -9999,
   },
 });
